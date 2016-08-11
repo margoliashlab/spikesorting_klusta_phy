@@ -8,21 +8,30 @@ import scipy.signal as sig
 
 sample_rate = 30000
 fN = sample_rate/2
-freq_norm = [500/fN, 10000/fN]
+freq_norm = [350/fN, 10000/fN]
 filtExtracel_b, filtExtracel_a =\
         sig.butter(2, freq_norm, btype='bandpass', output='ba')
 
 chunk_size = 1000000
 
-filename = "/home/mbadura/recordings/entries.arf"
+filename = "/home/mbadura/neuro/spikesorting/kyler/data.arf"
+outfiles_prefix = '/home/mbadura/neuro/spikesorting/kyler/'
+
+
+# if set to None, will take all entries - but that might cause problems if your file is non-standard
+entries_to_save = ['entry1', 'entry2'] #name of entries you want to save 
 channels_to_save = ['0', '1'] # names of the datasets in each entry that you want to save
 
-outfiles_prefix = 'entries_data/'
+
+
 
 
 with ArfStreamer(filename) as data:
     # data.file wraps the h5py object that we read data from
-    entries = [entry for entry in data.file] # can modify it to pick only the ones you want
+    if entries_to_save == None:
+        entries = [entry for entry in data.file]    
+    else:
+        entries = entries_to_save
     print(entries)
     outfiles = []
     for entry in entries:
@@ -35,9 +44,13 @@ with ArfStreamer(filename) as data:
                 .map(lambda chunk:
                     sig.filtfilt(filtExtracel_b, filtExtracel_a, chunk).astype('int16'))
             )
+        # mind the dtype! you will have to specify it in the .prm file as well
+        # also when you filter, it gives you a float, so if you had ints,
+        # you need to convert back
         outfile = outfiles_prefix + entry + '.dat'
         DatStreamer.save(stream, outfile)
         outfiles.append(entry+'.dat')
 
 print('This is the list of your entries, paste that into your .prm file:')
-print(outfiles)
+print('raw_data_files='+str(outfiles))
+print('nchannels='+str(len(channels)))

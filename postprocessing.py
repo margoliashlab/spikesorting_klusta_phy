@@ -43,18 +43,19 @@ def get_recordings(kwik):
 
 def get_data_by_recording(kwik, channel_group_prefix, good_clusters, recording_names):
     ''' Return a dict mapping recording names to spike data from that recording,
-        and taking only the good clusters
+        including only the Good clusters
     '''
     sample_rate = kwik['/application_data/spikedetekt/'].attrs['sample_rate']
     cluster_nums = kwik[channel_group_prefix + '/spikes/clusters/main']
     time_samples = kwik[channel_group_prefix + '/spikes/time_samples']
     times = time_samples / sample_rate # convert to seconds
     recording_nums = kwik[channel_group_prefix + '/spikes/recording']
+    names = np.array([str(i) for i in cluster_nums]).astype('|S8')
 
     grouped_by_recording = { rec : [] for rec in recording_names }
-    for (cluster_num, time, recording_num) in zip(cluster_nums, times, recording_nums):
+    for (cluster_num, time, recording_num, name) in zip(cluster_nums, times, recording_nums, names):
         if cluster_num in good_clusters:
-            grouped_by_recording[recording_names[recording_num]].append((time, cluster_num))
+            grouped_by_recording[recording_names[recording_num]].append((time, time, cluster_num, name))
 
     return grouped_by_recording
 
@@ -62,7 +63,7 @@ def save(arfname, grouped_by_recording, dset_name):
     ''' Save spike data to entries in the arf file, according to the recording names
         which are the keys in the `grouped_by_recording` dict
     '''
-    datatype = np.dtype([('start', np.float64), ('cluster', np.int16)])
+    datatype = np.dtype([('start', np.float64), ('stop', np.float64), ('cluster', np.int16), ('name', '|S8')])
     with h5py.File(arfname) as arffile:
         for (rec, vals) in grouped_by_recording.items():
             data = np.array(vals, dtype=datatype)
@@ -74,7 +75,8 @@ def save(arfname, grouped_by_recording, dset_name):
 def from_kwik_to_arf(kwikname, arfname, channel_group_prefix, dset_name):
     ''' Saves good clusters from the kwik file to the arf file.
         The files are tied to each other, because to spike sort you
-        need to use the other script. Performs that for a channel group
+        need to use the other script that creates .dat files according to
+        entry names. Performs that for a channel group
         in the kwik file, and saves a dataset to each entry in the arf file
         with name `dset_name`
     '''

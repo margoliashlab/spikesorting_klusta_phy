@@ -41,40 +41,14 @@ You can find an example, including also example parameter and config files [here
 
 ### Preparing the data
 
-Supposing you have [dspflow](https://github.com/kylerbrown/dspflow), you can use this script to reference electrode and uncoated channel, then filter it, and save to a .dat file. (Though syntax might change.)
+Supposing you have [dspflow](https://github.com/kylerbrown/dspflow), you can used the preprocessing script included in this repo. In the script, you modify the appropriate values, such as filename, and also select entries and channels you want to analyze. If you don't specify entries, then it will take all entries (though sometimes you might have some junk entries or top-level datasets, then it won't work). You have to specify datasets manually, because it's very likely that you will have some non-continuous datasets.
 
-    from Stream import Stream, ArfStreamer, DatStreamer
-    import scipy.signal as sig
-    
-    filename = "/path/to/file/data.arf"
-    outfile = "/save/path/test.dat"
-    
-    electrode_path = "/0/5"
-    uncoated_path = "/0/6"
-    
-    sample_rate = 30000
-    chunk_size = 10000000
-    
-    fN = sample_rate/2
-    
-    with ArfStreamer(filename) as data:
-        freq_norm = [500/fN, 10000/fN]
-    
-        filtExtracel_b, filtExtracel_a =\
-            sig.butter(2, freq_norm, btype='bandpass', output='ba')
-    
-        elec = data.stream_channel(electrode_path, chunk_size) #electrode channel
-        unc = data.stream_channel(uncoated_path, chunk_size) #uncoated channel
-        refd = (
-            Stream.merge(elec, unc).map(lambda chunk:
-                             chunk[:,0]-chunk[:,1])
-                .map(lambda chunk:
-                    sig.filtfilt(filtExtracel_b, filtExtracel_a, chunk).astype('int16'))
-        )
-    
-        DatStreamer.save(refd, outfile)
+To make that easier, use `python listlist.py ` to list all entries, and then all datasets from the first entry - that should help you, because you only need to delete the one you don't want, and paste them to your preprocessing script.
+
+Also it's important that you pay attention to the datatype! If you filter data as part of your preprocessing, then it's converted to floats, so for example if originally your data was in `int16`, then you might want to convert them back, for example `sig.filtfilt(filtExtracel_b, filtExtracel_a, chunk).astype('int16'))`. 
+
  
- ### Get parameter and probe files
+ ### Probe file
 
 Create a new folder, put the .dat file you create in it. It's important that you have a separate folder for each piece of spikesorting you do, because klustakwik creates some intermediate files.
 
@@ -92,7 +66,14 @@ For single channel data, you would use this .prb file. Save it in the folder as 
         }
     }
    
-   You also need a parameter file. Here's one that should be good. Save it as `test.prb` (or something).
+However, it gets more complicated if you have multishank data. Suppose you have 32 channels,
+8 per shank (and the rest doesn't appear in that shank's graph). Then the rest are "dead channels", and theoretically klusta should disregard them from spike sorting for that shank - however, that doesn't seem to be the case? In some files Kyler used before, for each shank you need to list all the channels that are in your .dat files, regardless if they are dead in this shank or not. So if you have 30 channels, then `channels = list(range(30))`. Otherwise phy won't load your data. However, then processing takes much (much) longer. Another thing you could do is to just process one shank at a time. But then channels have to be for example `[0,1,2,3,..7]`, not `[23,10,5...,17]`, otherwise you'll get an error. So in the prb file you need to replace, for example, 23 with 0, 10 with 1, and so on. It's pretty annoying. I asked on the [phy-users Google Group](https://groups.google.com/forum/#!topic/phy-users/jbJ-RT5oxJk), maybe they'll respond.
+
+### Parameter file
+
+You also need a parameter file. Here's one that should be good. Save it as `test.prb` (or something). Important parts are: number of channels (take from the output of the preprocessing) script, dtype (!!!), raw_data_files (take that from the output of preprocessing). 
+
+We filtered the data on our own, because otherwise if you visualize the data it's too messy to see anything. However, klustakwik also filters the data (with a low-pass filter?) Therefore we want to change its filtering parameters `filter_low=100.`, which is smaller than the frequency of the bandpass filter we used in the Python script, and `filter_butter_order=1`. I don't know. Sofija suggested that, so maybe ask her. It doesn't seem like there's an option to turn off filtering, but maybe there is one? Spike detection program is called spikedetekt, but it doesn't seem well documented.
 
     experiment_name = 'test' #name of your .dat file
     prb_file = '1singleUnit.prb'
@@ -134,8 +115,6 @@ For single channel data, you would use this .prb file. Save it in the folder as 
     klustakwik2 = dict(
         num_starting_clusters=100,
     )
-   
-We filtered the data on our own, because otherwise if you visualize the data it's too messy to see anything. However, klustakwik also filters the data (with a low-pass filter?) Therefore we want to change its filtering parameters `filter_low=100.`, which is smaller than the frequency of the bandpass filter we used in the Python script, and `filter_butter_order=1`. I don't know. Sofija suggested that, so maybe ask her. It doesn't seem like there's an option to turn off filtering, but maybe there is one? Spike detection program is called spikedetekt.
 
 ### Running klustakwik
 
@@ -156,4 +135,10 @@ I'm not sure if you can do that on trex; I got a GL error. Therefore you might h
     source activate phy
     phy kwik-gui test.kwik
 
-To scale the waveform in TraceView, use your right mouse button. The Increase/Narrow in the menu doesn't work for single channel data (that's what they told me on the mailing list). You can look at PCA in FeatureView, for example selecting a few clusters at once. Then you might want to cut out a part of the cluster (repeated ctrl+click creates a polygon), then Split the cluster and maybe Merge with some other cluster.
+To scale the waveform in TraceView, use your right mouse button. The Increase/Narrow in the menu doesn't work for single channel data (that's what they told me on the mailing list). You can look at PCA in FeatureView, for example selecting a few clusters at once. Then you might want to cut out a part of the cluster (repeated ctrl+click creates a polygon), then Split the cluster and maybe Merge with some other cluster. _Remember to save_, otherwise it's all gone (Clustering -> Save).
+
+### Putting the results back into your arf file
+
+Use the postprocessing script included here. You should only need to change paths of the files. If you have more than one shank in your prb file, then you will have multiple channel groups. Either run the script a few times, changing 0 to 1 etc. in the `channel_group_prefix`, or do a for loop.
+
+The script will put spikes corresponding to each entry into that entry, as dataset of name `dset_name`. You could add commandline option parsing, to make it easier. So if you want to have multiple channel groups, you need to change the name. Of course be careful, because once you add a dataset to an arf file, it's hard to get rid of it. Maybe backup you data first. And then you can look at your spikes in arfview!
