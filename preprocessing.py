@@ -2,7 +2,7 @@
 # then processes them and saves to .dat files with names the same as entries.
 # Also outputs the line you should paste into the .prm file of klusta as raw_data_files.
 # You should do everything in one directory (arf file, dat files, .prm and .prb files).
-from Stream import Stream, ArfStreamer, DatStreamer
+from dspflow import Stream, ArfStreamer, DatStreamer
 import scipy.signal as sig
 
 

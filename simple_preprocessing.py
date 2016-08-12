@@ -1,7 +1,7 @@
 # For very simple spike sorting or a test run - lets you pick a bunch of datasets,
 # and saves them to a .dat file.
 
-from Stream import Stream, ArfStreamer, DatStreamer
+from dspflow import Stream, ArfStreamer, DatStreamer
 import scipy.signal as sig
 
 filename = "/home/mbadura/neuro/spikesorting/long.arf"
